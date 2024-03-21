@@ -1,0 +1,7 @@
+.vscode
+.ipynb_checkpoints
+.vs
+.DS_Store
+.log
+.aux
+.gz
