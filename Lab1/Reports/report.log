@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999994 (TeX Live 2022) (preloaded format=xelatex 2022.7.3)  21 MAR 2024 16:15
+This is XeTeX, Version 3.141592653-2.6-0.999994 (TeX Live 2022) (preloaded format=xelatex 2022.7.3)  26 MAR 2024 11:58
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -124,7 +124,8 @@ File: l3backend-xetex.def 2022-02-07 L3 backend support: XeTeX
 \g__pdf_backend_object_int=\count274
 \g__pdf_backend_annotation_int=\count275
 \g__pdf_backend_link_int=\count276
-) (./report.aux)
+)
+No file report.aux.
 \openout1 = `report.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 23.
@@ -137,7 +138,7 @@ LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 23.
 LaTeX Font Info:    ... okay on input line 23.
 LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 23.
 LaTeX Font Info:    Trying to load font information for TS1+cmr on input line 23.
- (/usr/local/texlive/2022/texmf-dist/tex/latex/base/ts1cmr.fd
+(/usr/local/texlive/2022/texmf-dist/tex/latex/base/ts1cmr.fd
 File: ts1cmr.fd 2019/12/16 v2.5j Standard LaTeX font definitions
 )
 LaTeX Font Info:    ... okay on input line 23.
@@ -182,21 +183,156 @@ LaTeX Font Info:    ... okay on input line 23.
 * \@reversemarginfalse
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
+File: ./imgs/sigmoid.png Graphic file (type bmp)
+<./imgs/sigmoid.png>
+File: ./imgs/linear.png Graphic file (type bmp)
+<./imgs/linear.png>
+File: ./imgs/nn.png Graphic file (type bmp)
+<./imgs/nn.png>
 
-Underfull \hbox (badness 10000) in paragraph at lines 29--31
+Underfull \hbox (badness 10000) in paragraph at lines 56--60
 
  []
 
 [1
 
-] (./report.aux) ) 
-Here is how much of TeX's memory you used:
- 2183 strings out of 476179
- 35052 string characters out of 5809545
- 340070 words of memory out of 5000000
- 22957 multiletter control sequences out of 15000+600000
- 469299 words of font info for 33 fonts, out of 8000000 for 9000
- 1348 hyphenation exceptions out of 8191
- 55i,5n,62p,323b,157s stack positions out of 10000i,1000n,20000p,200000b,200000s
+] [2]
+Underfull \hbox (badness 10000) in paragraph at lines 70--71
 
-Output written on report.pdf (1 page).
+ []
+
+File: ./imgs/linear_back.png Graphic file (type bmp)
+<./imgs/linear_back.png>
+File: ./imgs/backprop.png Graphic file (type bmp)
+<./imgs/backprop.png>
+File: ./imgs/SGD.png Graphic file (type bmp)
+<./imgs/SGD.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 75--81
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 83--89
+
+ []
+
+[3]
+File: ./imgs/linear_train.png Graphic file (type bmp)
+<./imgs/linear_train.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 90--92
+
+ []
+
+File: ./imgs/xor_train.png Graphic file (type bmp)
+<./imgs/xor_train.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 93--95
+
+ []
+
+File: ./imgs/linear_data.png Graphic file (type bmp)
+<./imgs/linear_data.png>
+File: ./imgs/linear_pred1.png Graphic file (type bmp)
+<./imgs/linear_pred1.png>
+File: ./imgs/xor.png Graphic file (type bmp)
+<./imgs/xor.png>
+File: ./imgs/xor_pred1.png Graphic file (type bmp)
+<./imgs/xor_pred1.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 98--108
+
+ []
+
+[4] [5]
+File: ./imgs/linear_loss.png Graphic file (type bmp)
+<./imgs/linear_loss.png>
+File: ./imgs/xor_loss.png Graphic file (type bmp)
+<./imgs/xor_loss.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 110--113
+
+ []
+
+File: ./imgs/linear_loss_cmp.png Graphic file (type bmp)
+<./imgs/linear_loss_cmp.png>
+File: ./imgs/linear_lr0.1.png Graphic file (type bmp)
+<./imgs/linear_lr0.1.png>
+File: ./imgs/linear_lr0.0001.png Graphic file (type bmp)
+<./imgs/linear_lr0.0001.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 117--125
+
+ []
+
+[6]
+File: ./imgs/xor_loss_cmp.png Graphic file (type bmp)
+<./imgs/xor_loss_cmp.png>
+File: ./imgs/xor_lr0.1.png Graphic file (type bmp)
+<./imgs/xor_lr0.1.png>
+File: ./imgs/xor_lr0.0001.png Graphic file (type bmp)
+<./imgs/xor_lr0.0001.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 126--134
+
+ []
+
+[7]
+File: ./imgs/linear_n_hidden.png Graphic file (type bmp)
+<./imgs/linear_n_hidden.png>
+File: ./imgs/xor_n_hidden.png Graphic file (type bmp)
+<./imgs/xor_n_hidden.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 136--144
+
+ []
+
+[8]
+File: ./imgs/wo_act_loss.png Graphic file (type bmp)
+<./imgs/wo_act_loss.png>
+File: ./imgs/xor_wo_act.png Graphic file (type bmp)
+<./imgs/xor_wo_act.png>
+ [9]
+File: ./imgs/relu.png Graphic file (type bmp)
+<./imgs/relu.png>
+File: ./imgs/linear_relu_loss.png Graphic file (type bmp)
+<./imgs/linear_relu_loss.png>
+File: ./imgs/xor_relu_loss.png Graphic file (type bmp)
+<./imgs/xor_relu_loss.png>
+
+Underfull \hbox (badness 10000) in paragraph at lines 153--160
+
+ []
+
+[10]
+Underfull \hbox (badness 10000) in paragraph at lines 162--164
+
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 167--168
+
+ []
+
+File: ./imgs/opts.png Graphic file (type bmp)
+<./imgs/opts.png>
+File: ./imgs/linear_opt_0.1.png Graphic file (type bmp)
+<./imgs/linear_opt_0.1.png>
+File: ./imgs/xor_opt_0.1.png Graphic file (type bmp)
+<./imgs/xor_opt_0.1.png>
+File: ./imgs/linear_opt_0001.png Graphic file (type bmp)
+<./imgs/linear_opt_0001.png>
+File: ./imgs/xor_opt_0001.png Graphic file (type bmp)
+<./imgs/xor_opt_0001.png>
+[11] [12] (./report.aux) ) 
+Here is how much of TeX's memory you used:
+ 2446 strings out of 476179
+ 41463 string characters out of 5809545
+ 346074 words of memory out of 5000000
+ 23184 multiletter control sequences out of 15000+600000
+ 469761 words of font info for 36 fonts, out of 8000000 for 9000
+ 1348 hyphenation exceptions out of 8191
+ 55i,9n,62p,323b,157s stack positions out of 10000i,1000n,20000p,200000b,200000s
+
+Output written on report.pdf (12 pages).
