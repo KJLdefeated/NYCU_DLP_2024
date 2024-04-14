@@ -1,0 +1,124 @@
+\documentclass{article} % This command is used to set the type of document you are working on such as an article, book, or presenation
+
+\usepackage{geometry} % This package allows the editing of the page layout
+\usepackage{amsmath}  % This package allows the use of a large range of mathematical formula, commands, and symbols
+\usepackage{graphicx}  % This package allows the importing of images
+
+\newcommand{\question}[2][]{\begin{flushleft}\textbf{Question #1}: \textit{#2}\end{flushleft}}
+\newcommand{\sol}{\textbf{Solution}:} %Use if you want a boldface solution line
+\newcommand{\maketitletwo}[2][]{\begin{center}
+        \Large{\textbf{Lab 3 Report}
+        
+            Deep Learning} % Name of course here
+        \vspace{5pt}
+        
+        \normalsize{
+            Name: Kai-Jie Lin 
+            
+            Student ID\: 110652019
+            
+            \today}
+        \vspace{15pt}
+        \end{center}}
+\begin{document}
+    \maketitletwo[5]  % Optional argument is assignment number
+    %Keep a blank space between maketitletwo and \question[1]
+    
+    \section{Overview}
+
+    In this lab, I implemented UNet and ResNet34\_Unet architecture with Pytorch.
+    I use the models to do binary semantic segmentation on the Oxford-IIIT Pet dataset.
+    Futhermore, I designed my own dataloader and data preprocessing technique to train the model.
+    Finally, I evaluated the model with the test dataset, calclated the dice score and inferencing the image.
+
+    \section{Implementation Details}
+    \subsection{Details of training, evaluating, inferencing}
+    \textbf{Training}: 
+    I trained the model with the training dataset and the model is trained with the cross-entropy loss function and the Adam optimizer.
+    I also used the learning rate scheduler to adjust the learning rate during training.
+    For each epoch, I calculated the dice score that testing on the validation dataset. \\
+    \includegraphics[width=14cm]{img/train.png} \\
+    \textbf{Evaluating}:
+    I evaluated the model with the test dataset and calculated the dice score. \\
+    \includegraphics[width=10cm]{img/eval.png} \\
+    \textbf{Inferencing}:
+    I inferenced the image with the trained model. \\
+    \includegraphics[width=10cm]{img/infer.png} \\
+    \includegraphics[width=10cm]{img/preprocess.png} \\
+    \subsection{UNet \& ResNet34\_UNet}
+    \textbf{UNet}: \\
+    Encoder: \\
+    \includegraphics[width=10cm]{img/unet_encoder.png} \\
+    Decoder: \\
+    \includegraphics[width=10cm]{img/unet_decoder.png} \\
+    Unet: \\
+    \includegraphics[width=10cm]{img/unet.png} \\
+    \textbf{ResNet34\_UNet}: \\
+    ResNetBlock: \\
+    \includegraphics[width=10cm]{img/resnet_block.png} \\
+    Encoder: \\
+    \includegraphics[width=10cm]{img/resnet34_encoder.png} \\
+    Decoder: \\
+    \includegraphics[width=10cm]{img/resnet34_decoder.png} \\
+    ResNet34\_Unet: \\
+    \includegraphics[width=10cm]{img/resnet341.png} \\
+    \includegraphics[width=10cm]{img/resnet342.png} \\
+    
+    
+    \section{Data Preprocessing}
+    \subsection{How to preprocess the data?}
+    I use some data augmentation techniques to preprocess the data. 
+    For example, random vertical or horizontal flip the image and randomly rotate the image.\\
+    \includegraphics[width=7cm]{img/aug.png} \\
+    \subsection{What makes my method special?}
+    I use the data augmentation technique to increase the diversity of the dataset. 
+    This can help the model to learn more features and improve the accuracy. \\
+    Original Image: \\
+    \includegraphics[width=7cm]{img/cat.png} \\
+    Augmented Image: \\
+    \includegraphics[width=7cm]{img/cataug.png} \\
+    \section{Experimental Results}
+    \subsection{What did you explore during the training process?}
+    Training loss comparison: \\
+    \includegraphics[width=10cm]{img/loss.png} \\
+    Dice score on validation set: \\
+    \includegraphics[width=10cm]{img/dice.png} \\
+    \subsection{Found any characteristics of the data?}
+    A lot of images contain big part of animals and the background is simple. 
+    If the model can learn the features of the animals, the model can get a high accuracy. \\
+
+    \section{Execution command}
+    \subsection{The command and parameters for the training process}
+    Command: python src/train.py --model U --lr 1e-4 --epochs 500 \\
+    Training model: UNet, learning rate: 1e-4, epochs: 500, Batch size: 8,\\ Exponential lr Decay $\gamma=0.99$ \\
+    Command: python src/train.py --model R --lr 3e-5 --epochs 500 \\
+    Training model: ResNet34\_Unet, learning rate: 3e-5, epochs: 500, Batch size: 8,\\ Exponential lr Decay $\gamma=0.99$ \\
+    \subsection{The command and parameters for the inference process}
+    Command: python src/inference.py --model U --batch\_size 1 --load\_model\_epoch 500 \\
+    Inference model: UNet, batch size: 1, load model epoch: 500 \\
+    Command: python src/inference.py --model R --batch\_size 1 --load\_model\_epoch 500 \\
+    Inference model: ResNet34\_Unet, batch size: 1, load model epoch: 500 \\
+
+    \section{Discussion}
+    \subsection{What architecture may bring better results?}
+    From the inferencing result, we can see that the UNet can get a better result than ResNet34\_Unet under same training epochs.
+    The UNet can get a better dice score and the segmentation result is more accurate. \\
+    \includegraphics[width=15cm]{img/U_res.png} \\
+    \includegraphics[width=15cm]{img/R_res.png} \\
+    Inference Result: See Figure 1 and Figure 2. \\
+    \begin{figure}
+        \centering
+        \includegraphics[width=5cm]{img/U_inferimg.png}
+        \caption{UNet}
+    \end{figure}
+    \begin{figure}
+        \centering
+        \includegraphics[width=5cm]{img/R_inferimg.png}
+        \caption{ResNet34\_Unet}
+    \end{figure}
+    \subsection{What are the potential research topics in this task?}
+    This dataset is relatively simple and the model can get a high accuracy.
+    What if there are more complex background or the animals are not in the center of the image?
+    We can try to use the more complex model or use the more complex data augmentation technique to improve the accuracy. \\
+
+\end{document}

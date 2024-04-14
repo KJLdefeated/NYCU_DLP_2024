@@ -1,0 +1,98 @@
+\documentclass{article} % This command is used to set the type of document you are working on such as an article, book, or presenation
+
+\usepackage{geometry} % This package allows the editing of the page layout
+\usepackage{amsmath}  % This package allows the use of a large range of mathematical formula, commands, and symbols
+\usepackage{graphicx}  % This package allows the importing of images
+
+\newcommand{\question}[2][]{\begin{flushleft}\textbf{Question #1}: \textit{#2}\end{flushleft}}
+\newcommand{\sol}{\textbf{Solution}:} %Use if you want a boldface solution line
+\newcommand{\maketitletwo}[2][]{\begin{center}
+        \Large{\textbf{Lab 2 Report}
+        
+            Deep Learning} % Name of course here
+        \vspace{5pt}
+        
+        \normalsize{
+            Name: Kai-Jie Lin 
+            
+            Student ID: 110652019
+            
+            \today}
+        \vspace{15pt}
+        \end{center}}
+\begin{document}
+    \maketitletwo[5]  % Optional argument is assignment number
+    %Keep a blank space between maketitletwo and \question[1]
+    
+    \section{Introduction}
+
+    In this lab, I implemented VGG19 and ResNet50 architecture with Pytorch.
+    I use the models to classify the butterflies and moths dataset with 100 classes.
+    Futhermore, I designed my own dataloader and data preprocessing technique to train the model.
+    Finally, I evaluated the model with the test dataset and calcßlated the accuracy.
+
+    \section{Implementation Details}
+    \subsection{Details of models}
+    \textbf{VGG19} \\
+    Optimizer: SGD \\
+    Criterion: CrossEntropyLoss \\
+    Model architecture: \\
+    \includegraphics[width=7cm]{img/vgg1.png}
+    \includegraphics[width=7cm]{img/vgg2.png}
+    \\ \textbf{ResNet50} \\
+    Optimizer: SGD \\
+    Criterion: CrossEntropyLoss \\
+    BottleNeckBlock: \\
+    \includegraphics[width=12cm]{img/Bottleneck.png} \\
+    Model architecture: \\
+    \includegraphics[width=9cm]{img/resnet.png} \\
+
+    \subsection{Details of dataloader}
+    \textbf{Dataloaders} \\
+    I designed my own dataloader to load the dataset. Here batch size is 32. \\
+    \includegraphics[width=12cm]{img/loaders.png} \\
+    get\_item function: \\
+    \includegraphics[width=9cm]{img/dataloader.png} \\
+
+    \section{Data Preprocessing}
+    \subsection{How to preprocess the data?}
+    I use some data augmentation techniques to preprocess the data. 
+    For example, random flip the image and randomly change the brightness, contrast, saturation and hue of an image.\\
+    \includegraphics[width=14cm]{img/augmentation.png} \\
+    Original image: \\
+    \includegraphics[width=5cm]{img/orig.png} \\
+    Augmented image: \\
+    \includegraphics[width=5cm]{img/aug.png} \\
+    \subsection{What makes my method special?}
+    I use the data augmentation technique to increase the diversity of the dataset. 
+    This can help the model to learn more features and improve the accuracy.
+
+    \section{Experimental Results}
+    \subsection{The highest accuracy}
+    \textbf{VGG19} \\
+    The highest accuracy on test dataset is 88.8\%. \\
+    \includegraphics[width=14cm]{img/vgg_score.png} \\
+    \textbf{ResNet50} \\
+    The highest accuracy on test dataset is 88.4\%. \\
+    \includegraphics[width=14cm]{img/resnet_score.png} \\
+    \subsection{Comparison}
+    \textbf{Training Loss}: \\
+    \includegraphics[width=8cm]{img/loss.png} \\
+    \textbf{Training and Validation Accuracy per Epoch}: \\
+    \includegraphics[width=8cm]{img/acc.png} \\
+    \textbf{Test on each datasets}: \\
+    \includegraphics[width=14cm]{img/test_vgg.png} \\
+    \includegraphics[width=14cm]{img/test_resnet.png} \\
+    \section{Discussion}
+    \subsection{Different Optimizer}
+    I compare the performance of the model with SGD optimizer and Adam optimizer.
+    The result shows that the model with Adam optimizer has a higher accuracy under test dataset than the model with SGD optimizer.
+    SGD can reach higher accuracy on training dataset but Adam can reach higher accuracy on test dataset.
+    SGD is more likely to overfit the training dataset. \\
+    \textbf{Training Loss}: \\
+    \includegraphics[width=8cm]{img/loss_opt.png} \\
+    \textbf{Training and Test Accuracy per Epoch}: \\
+    \includegraphics[width=8cm]{img/acc_opt.png} \\
+    
+
+\end{document}
