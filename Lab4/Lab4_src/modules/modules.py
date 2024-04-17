@@ -76,8 +76,9 @@ class Gaussian_Predictor(nn.Sequential):
         )
         
     def reparameterize(self, mu, logvar):
-        # TODO
-        raise NotImplementedError
+        epsilon = Variable(torch.randn(mu.size())).cuda()
+        z = mu + epsilon * torch.exp(logvar/2)
+        return z
 
     def forward(self, img, label):
         feature = torch.cat([img, label], dim=1)

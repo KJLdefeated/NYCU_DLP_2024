@@ -10,9 +10,8 @@ from modules import Generator, Gaussian_Predictor, Decoder_Fusion, Label_Encoder
 from torchvision.utils import save_image
 from torch import stack
 
-import imageio
 from math import log10
-from Trainer import VAE_Model
+from Trainer import VAE_Model, Generate_PSNR
 import glob
 import pandas as pd
 
@@ -44,7 +43,8 @@ class Dataset_Dance(torchData):
         self.img_folder = []
         self.label_folder = []
         
-        data_num = len(glob('./Demo_Test/*'))
+        #data_num = len(glob('./Demo_Test/*'))
+        data_num = 5
         for i in range(data_num):
             self.img_folder.append(sorted(glob(os.path.join(root , f'test/test_img/{i}/*')), key=get_key))
             self.label_folder.append(sorted(glob(os.path.join(root , f'test/test_label/{i}/*')), key=get_key))
@@ -89,7 +89,12 @@ class Test_model(VAE_Model):
         
         
     def forward(self, img, label):
-        pass     
+        frame = self.frame_transformation(img)
+        pose = self.label_transformation(label)
+        z, mu, logvar = self.Gaussian_Predictor(frame, pose)
+        fusion = self.Decoder_Fusion(frame, pose, z)
+        return self.Generator(fusion)
+        
             
     @torch.no_grad()
     def eval(self):
@@ -107,9 +112,6 @@ class Test_model(VAE_Model):
         df.insert(0, 'id', range(0, len(df)))
         df.to_csv(os.path.join(self.args.save_root, f'submission.csv'), header=True, index=False)
         
-        
-            
-    
     def val_one_step(self, img, label, idx=0):
         img = img.permute(1, 0, 2, 3, 4) # change tensor into (seq, B, C, H, W)
         label = label.permute(1, 0, 2, 3, 4) # change tensor into (seq, B, C, H, W)
@@ -122,10 +124,13 @@ class Test_model(VAE_Model):
         decoded_frame_list = [img[0].cpu()]
         label_list = []
 
-        # TODO
-        raise NotImplementedError
-            
-        
+        img_in = img[0]
+        for i in range(629):
+            pred_frame = self(img_in, label[i])
+            img_in = pred_frame
+            decoded_frame_list.append(pred_frame.cpu())
+            label_list.append(label[i].cpu())
+                    
         # Please do not modify this part, it is used for visulization
         generated_frame = stack(decoded_frame_list).permute(1, 0, 2, 3, 4)
         label_frame = stack(label_list).permute(1, 0, 2, 3, 4)
@@ -169,7 +174,10 @@ class Test_model(VAE_Model):
 
 
 def main(args):
-    os.makedirs(args.save_root, exist_ok=True)
+    log_save_path = f"logs/lr_{args.lr}_b_{args.batch_size}_optim_{args.optim}_tfr_{args.tfr}_{args.tfr_sde}_{args.tfr_d_step}_kl_{args.kl_anneal_type}_{args.kl_anneal_cycle}_{args.kl_anneal_ratio}_lr_{args.lr_scheduler}_{args.lr_milestones}_{args.lr_gamma}"
+    os.makedirs(f"{log_save_path}/{args.save_root}", exist_ok=True)
+    args.save_root = f"{log_save_path}/{args.save_root}"
+    args.ckpt_path = f"{log_save_path}/ckpt/{args.load_model_epoch}.ckpt"
     model = Test_model(args).to(args.device)
     model.load_checkpoint()
     model.eval()
@@ -188,8 +196,8 @@ if __name__ == '__main__':
     parser.add_argument('--no_sanity',     action='store_true')
     parser.add_argument('--test',          action='store_true')
     parser.add_argument('--make_gif',      action='store_true')
-    parser.add_argument('--DR',            type=str, required=True,  help="Your Dataset Path")
-    parser.add_argument('--save_root',     type=str, required=True,  help="The path to save your data")
+    parser.add_argument('--DR',            type=str, default="Dataset", help="Your Dataset Path")
+    parser.add_argument('--save_root',     type=str, default="Result", help="The path to save your data")
     parser.add_argument('--num_workers',   type=int, default=4)
     parser.add_argument('--num_epoch',     type=int, default=70,     help="number of total epoch")
     parser.add_argument('--per_save',      type=int, default=3,      help="Save checkpoint every seted epoch")
@@ -210,7 +218,8 @@ if __name__ == '__main__':
     parser.add_argument('--tfr',           type=float, default=1.0,  help="The initial teacher forcing ratio")
     parser.add_argument('--tfr_sde',       type=int,   default=10,   help="The epoch that teacher forcing ratio start to decay")
     parser.add_argument('--tfr_d_step',    type=float, default=0.1,  help="Decay step that teacher forcing ratio adopted")
-    parser.add_argument('--ckpt_path',     type=str,    default=None,help="The path of your checkpoints")   
+    parser.add_argument('--ckpt_path',     type=str,    default=None,help="The path of your checkpoints")
+    parser.add_argument('--load_model_epoch', type=int, default=0, help="The epoch of the model you want to load")   
     
     # Training Strategy
     parser.add_argument('--fast_train',         action='store_true')
@@ -219,10 +228,13 @@ if __name__ == '__main__':
     
     # Kl annealing stratedy arguments
     parser.add_argument('--kl_anneal_type',     type=str, default='Cyclical',       help="")
-    parser.add_argument('--kl_anneal_cycle',    type=int, default=10,               help="")
+    parser.add_argument('--kl_anneal_cycle',    type=int, default=20,               help="")
     parser.add_argument('--kl_anneal_ratio',    type=float, default=1,              help="")
     
-
+    # LR scheduler
+    parser.add_argument('--lr_scheduler',       type=str, default='MultiStepLR',    help="")
+    parser.add_argument('--lr_milestones',      type=list, default=[2, 5],           help="")
+    parser.add_argument('--lr_gamma',           type=float, default=0.1,            help="")
     
 
     args = parser.parse_args()
