@@ -1,0 +1,189 @@
+\documentclass{article} % This command is used to set the type of document you are working on such as an article, book, or presenation
+
+\usepackage{geometry} % This package allows the editing of the page layout
+\usepackage{amsmath}  % This package allows the use of a large range of mathematical formula, commands, and symbols
+\usepackage{graphicx}  % This package allows the importing of images
+
+\newcommand{\question}[2][]{\begin{flushleft}\textbf{Question #1}: \textit{#2}\end{flushleft}}
+\newcommand{\sol}{\textbf{Solution}:} %Use if you want a boldface solution line
+\newcommand{\maketitletwo}[2][]{\begin{center}
+        \Large{\textbf{Lab 4 Report}
+        
+            Deep Learning} % Name of course here
+        \vspace{5pt}
+        
+        \normalsize{
+            Name: Kai-Jie Lin 
+            
+            Student ID\: 110652019
+            
+            \today}
+        \vspace{15pt}
+        \end{center}}
+\begin{document}
+    \maketitletwo[5]  % Optional argument is assignment number
+    %Keep a blank space between maketitletwo and \question[1]
+    
+    \section{Derivate conditional VAE formula}
+    From original VAE objective, we want to maximize the maximum log likelihood of the data $x$:
+    \[
+    \log p(x;\theta) = KL(q(z|x;\phi)||p(z|x;\theta)) + \int q(z|x;\phi) \log \frac{p(x|z;\theta)}{q(z|x;\phi)}  dz
+    \]
+    Where decoder $p$ is parameterized by $\theta$ and encoder $q$ is parameterized by $\phi$.\\
+    Consider the conditional VAE, we want to maximize the maximum log likelihood of the data $x$ and the conditional variable $c$:
+    \[
+        \begin{aligned}
+            \log p(x,c;\theta) 
+            &= KL(q(z|x,c;\phi)||p(z|x,c;\theta)) + \int q(z|x,c;\phi) \log \frac{p(x|z,c;\theta)}{q(z|x,c;\phi)}  dz \\
+            &\geq \int q(z|x,c;\phi) \log \frac{p(x|z,c;\theta)p(c|x;\theta)}{q(z|x,c;\phi)}  dz
+        \end{aligned}
+    \]
+    We want to maximize the variational lower bound of the log likelihood. So we can derive the loss function:
+    \[
+        \begin{aligned}
+            L(x, c, q, \theta) 
+            &= \int q(z|x,c;\phi) \log \frac{p(x|z,c;\theta)p(c|x;\theta)}{q(z|x,c;\phi)}  dz \\ 
+            &= \int q(z|x,c;\phi) \log \frac{p(x|c;\theta)p(z|c;\theta)}{q(z|x,c;\phi)}  dz \\
+            &= \int q(z|x,c;\phi) \log \frac{p(x|c;\theta)}{q(z|x,c;\phi)}  dz + \int q(z|x,c;\phi) \log p(x|z,c;\theta)  dz \\
+            &= -KL(q(z|x,c;\phi)||p(z|c;\theta)) + E_{z~q(z|x,c;\phi)}[\log p(x|z,c;\theta)]
+        \end{aligned}
+    \]
+
+    \section{Introduction}
+    In this lab, I implemented conditional VAE to do video prediction. 
+    The model is trained on 23k video frames and tested on 5 video seqeunces with 630 frames.
+    I experimented various training strategies and hyperparameters to improve the performance of the model.
+    The details of the implementation and the analysis of the results are presented in the following sections.
+    
+    \section{Implementation details}
+    \subsection{Training protocol}
+    \textbf{Training Stage:}
+    In one traning epoch, I first determine whether adapting teacher forcing strategy or not. 
+    Then, sample a batch of video frames from the training dataset.
+    In one traning step, there will be 16 frames in a batch.
+    I made 15 times forward pass and calculate the mean squared error between the predicted frame and the ground truth frame.
+    If I adapt teacher forcing strategy, I will use the ground truth frame as the input of the next time step.
+    Otherwise, I will use the predicted frame as the input of the next time step.
+    I also calculate the kl divergence between the latent variable and the prior distribution.
+    Finally, I sum the loss of the mean squared error and the kl divergence times kl annealing beta and update the model.\\
+    \includegraphics[width=7cm]{img/training_stage.png}\\\textbf{Model Forward:}
+    In one forward pass, I first input the current frame and last frame to the frame encoder.
+    Then, input the label into the label encoder. 
+    We can predict the latent variable, the mean and the variance of the latent variable from gaussian predictor that takes the output of the frame encoder and the label encoder as input.
+    Finally, we input last frame, current label and the latent variable to the frame decoder to predict the next frame.
+    KL divergence can be calculated by the mean and the variance of the latent variable.\\
+    \includegraphics[width=7cm]{img/forward.png}
+
+    
+    \subsection{Reparameterization tricks}
+    We want to sample the latent variable from the gaussian distribution. But we can't backpropagate through the sampling operation.
+    So we use the reparameterization trick to sample the latent variable. 
+    $z = \mu + \epsilon \sigma$, where $z$ is the latent variable, $mu$ is mean of $z$, $\sigma$ is standard deviation of $z$, $\epsilon$ is sampled from the standard normal distribution. \\
+    \includegraphics[width=7cm]{img/reparm.png}\\
+    
+
+    \subsection{Teacher forcing strategy}
+    There are three parameters in the teacher forcing strategy: initial teacher forcing ratio, epoch that start to decay, and decay step.
+    If the current epoch is less than the epoch that start to decay, the teacher forcing ratio will be the initial teacher forcing ratio.
+    Otherwise, the teacher forcing ratio decrease linearly.\\
+    For example, if the initial teacher forcing ratio is 1.0, the epoch that start to decay is 10, and the decay step is 0.1.
+    We can plot the teacher forcing ratio with respect to the epoch.\\
+    \includegraphics[width=5cm]{img/tfr.png}\\
+    
+    \subsection{Kl annealing ratio}
+    There are three types of kl annealing: Cyclical, Monotonic and Non-annealing. \\
+    \textbf{Cyclical:} \\
+    $\beta$ is the kl annealing ratio, $T$ is number of total epoches, $t$ is current epoch, $M$ is kl annealing cycle and $R$ is kl annealing ratio.\\
+    With $\tau = \frac{\mod(t, \lceil T/M \rceil)}{T/M}$. If $\tau \leq R$, $\beta = \tau / R$, otherwise $\beta = 1$.
+    For example, if $T = 100$, $M = 10$, $R = 1.0$, we can plot the kl annealing ratio with respect to the epoch.\\
+    \includegraphics[width=7cm]{img/kl_anneal.png}\\
+    \textbf{Monotonic:} \\
+    $\beta = \min(1, tM/RT)$\\
+    For example, if $T = 100$, $M = 10$, $R = 1.0$, we can plot the kl annealing ratio with respect to the epoch.\\
+    \includegraphics[width=5cm]{img/mono.png}\\
+    \textbf{Non-annealing:} \\
+    $\beta = 1.0$\\
+    
+
+    \section{Analysis \& Discussion}
+    \subsection{Teacher forcing ratio}
+    All experiments below are trained with kl annealing ratio = 1.0, kl annealing type = Cyclical, kl annealing cycle = 10 and Adam optimizer.\\
+    \textbf{Case1:} tfr = 1.0, tfr\_sde=10, tfr\_d\_step=0.1\\
+    \includegraphics[width=6cm]{img/tfr1.png}
+    \includegraphics[width=6cm]{img/tfr_loss1.png} \\
+    We can observe that the loss first decrease and then increase after 10 epoches.
+    The model would first learn the distribution from the ground truth instead of the predicted frame.
+    After 10 epoches, the model would learn the distribution from the predicted frame.
+    This is not efficient for model to learn conditional generation from the predicted frames.\\
+    \textbf{Case2:} tfr = 0.8, tfr\_sde=10, tfr\_d\_step=0.1\\
+    \includegraphics[width=6cm]{img/tfr2.png}
+    \includegraphics[width=6cm]{img/tfr_loss2.png} \\
+    We can observe that the loss is not stable at the first 10 epoch.
+    That is because the model have some probability to learn the distribution from the predicted frame.
+    The loss is lower than the same epoch of case1 (ex. 40 epoch).\\
+    \textbf{Case3:} tfr = 0.0, tfr\_sde=10, tfr\_d\_step=0.1\\
+    \includegraphics[width=6cm]{img/tfr3.png}
+    \includegraphics[width=6cm]{img/tfr_loss3.png}\\
+    The loss decrease more smoothly than the previous two cases.
+    The model learn the distribution directly from the predicted frame from the beginning.
+    However, the loss is higher than the previous two cases. \\
+    \textbf{Compare the three cases:} \\
+    Loss: \\
+    \includegraphics[width=10cm]{img/tfr_cmp.png} \\
+    Validation PSNR: \\
+    \includegraphics[width=10cm]{img/tfr_cmp_val.png} \\
+    \textbf{Conclusion:} \\
+    We can see that the model with tfr = 0.8 have the lowest loss and the highest validation PSNR.
+    Lower tfr can make model learn faster and perform better.\\
+    \subsection{Plot the loss curve while training with different settings.}
+    All experiments below are trained with tfr = 1.0, tfr\_sde=10, tfr\_d\_step=0.1 and Adam optimizer\\
+    \textbf{With KL annealing (Monotonic):}\\
+    $\beta = \min(1, tM/RT)$, $T = 100$, $M = 10$, $R = 1.0$.\\
+    Left: $\beta$ / Right: Loss.\\
+    \includegraphics[width=4cm]{img/mono.png}
+    \includegraphics[width=7cm]{img/mono_loss.png} \\
+    The loss decrease smoothly after 20 epoches.\\
+    \textbf{With KL annealing (Cyclical):}\\
+    $\tau = \frac{\mod(t, \lceil T/M \rceil)}{T/M}$. If $\tau \leq R$, $\beta = \tau / R$, otherwise $\beta = 1$.\\
+    $T = 100$, $M = 10$, $R = 1.0$.\\
+    Left: $\beta$ / Right: Loss.\\
+    \includegraphics[width=4cm]{img/kl_anneal.png}
+    \includegraphics[width=7cm]{img/cyc_loss.png} \\
+    We can observe that the loss would decrease and increase periodically since the cyclical kl annealing.\\
+    \textbf{With KL annealing (None):}\\
+    $\beta = 1.0$.\\
+    Left: $\beta$ / Right: Loss.\\
+    \includegraphics[width=4cm]{img/none.png}
+    \includegraphics[width=7cm]{img/none_loss.png} \\
+    The loss curve is quite similar to the monotonic kl annealing but the value is larger.\\
+    \textbf{Compare three settings:}\\
+    Loss:\\
+    \includegraphics[width=9cm]{img/kl_loss_cmp.png}\\
+    Validation PSNR:\\
+    \includegraphics[width=9cm]{img/kl_psnr.png}\\
+    From the comparison plots above, we can conclude that kl annealing indeed helps model training.
+    The model with cyclical kl annealing have the lowest loss and the highest validation PSNR.\\
+    \subsection{Plot the PSNR-per frame diagram in validation dataset}
+    From the experiments above, we can see that the model with tfr = 0.8, ,tfr\_sde=10, tfr\_d\_step=0.1, kl annealing type = Cyclical, kl annealing cycle = 50, kl annealing ratio = 1.0 and Adam optimizer may have the best performance.\\
+    Here is the validation PSNR of each epoch after training for 500 epoches:\\
+    \includegraphics[width=9cm]{img/b_psnr.png}\\
+    And the PSNR-per frame diagram tested by 500 epoch model:\\
+    \includegraphics[width=7cm]{img/psnr_pf.png}\\
+    We can observe that the PSNR value drop dramatically at around 500 frames.
+    I guess that is because the person we want to predict have big movement in the video.\\ 
+    \subsection{Other training strategy analysis}
+    \textbf{Use SGD optimizer to converge the performance:}\\
+    I use SGD optimizer to reach higher PSNR value after training for 500 epoches using Adam optimizer.
+    Since SGD directly update the model parameters, it may be more efficient to reach the optimal we want.
+    This helps me get higher score on Kaggle.\\
+    \textbf{Bayesian Optimization:}\\
+    I use Bayesian Optimization to search the best hyperparameters for the model.
+    Bayesian optimization is a sequential design strategy for global optimization of black-box functions that does not assume any functional forms. It is usually employed to optimize expensive-to-evaluate functions.\\
+    Search space:\\
+    \includegraphics[width=5cm]{img/bo_search.png}\\
+    From the result of Bayesian Optimization, I found that tfr around 0.3 to 0.8 may have better performance.\\
+    \includegraphics[width=8cm]{img/bo_psnr.png}\\
+    
+   
+
+\end{document}

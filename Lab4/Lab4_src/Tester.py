@@ -91,13 +91,15 @@ class Test_model(VAE_Model):
     def forward(self, img, label):
         frame = self.frame_transformation(img)
         pose = self.label_transformation(label)
-        z, mu, logvar = self.Gaussian_Predictor(frame, pose)
+        z_1, mu, logvar = self.Gaussian_Predictor(frame, pose)
+        z = torch.randn(z_1.size()).to(self.args.device)
         fusion = self.Decoder_Fusion(frame, pose, z)
         return self.Generator(fusion)
         
             
     @torch.no_grad()
-    def eval(self):
+    def eval_val(self):
+        self.eval()
         val_loader = self.val_dataloader()
         pred_seq_list = []
         for idx, (img, label) in enumerate(tqdm(val_loader, ncols=80)):
@@ -174,13 +176,13 @@ class Test_model(VAE_Model):
 
 
 def main(args):
-    log_save_path = f"logs/lr_{args.lr}_b_{args.batch_size}_optim_{args.optim}_tfr_{args.tfr}_{args.tfr_sde}_{args.tfr_d_step}_kl_{args.kl_anneal_type}_{args.kl_anneal_cycle}_{args.kl_anneal_ratio}_lr_{args.lr_scheduler}_{args.lr_milestones}_{args.lr_gamma}"
-    os.makedirs(f"{log_save_path}/{args.save_root}", exist_ok=True)
-    args.save_root = f"{log_save_path}/{args.save_root}"
+    log_save_path = f"logs/lr_{args.lr}_b_{args.batch_size}_optim_{args.optim}_tfr_{args.tfr}_{args.tfr_sde}_{args.tfr_d_step}_kl_{args.kl_anneal_type}_{args.kl_anneal_cycle}_{args.kl_anneal_ratio}_lr_{args.lr_scheduler}_{args.lr_milestones}_{args.lr_gamma}_randomerase_{args.random_erase}"
+    os.makedirs(f"{log_save_path}/{args.save_root}/{args.load_model_epoch}", exist_ok=True)
+    args.save_root = f"{log_save_path}/{args.save_root}/{args.load_model_epoch}"
     args.ckpt_path = f"{log_save_path}/ckpt/{args.load_model_epoch}.ckpt"
     model = Test_model(args).to(args.device)
     model.load_checkpoint()
-    model.eval()
+    model.eval_val()
 
 
 
@@ -189,9 +191,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('--batch_size',    type=int,    default=2)
-    parser.add_argument('--lr',            type=float,  default=0.001,     help="initial learning rate")
+    parser.add_argument('--lr',            type=float,  default=1e-6,     help="initial learning rate")
     parser.add_argument('--device',        type=str, choices=["cuda", "cpu"], default="cuda")
-    parser.add_argument('--optim',         type=str, choices=["Adam", "AdamW"], default="Adam")
+    parser.add_argument('--optim',         type=str, choices=["Adam", "AdamW", "SGD"], default="SGD")
     parser.add_argument('--gpu',           type=int, default=1)
     parser.add_argument('--no_sanity',     action='store_true')
     parser.add_argument('--test',          action='store_true')
@@ -215,8 +217,8 @@ if __name__ == '__main__':
     parser.add_argument('--D_out_dim',     type=int, default=192,    help="Dimension of the output in Decoder_Fusion")
     
     # Teacher Forcing strategy
-    parser.add_argument('--tfr',           type=float, default=1.0,  help="The initial teacher forcing ratio")
-    parser.add_argument('--tfr_sde',       type=int,   default=10,   help="The epoch that teacher forcing ratio start to decay")
+    parser.add_argument('--tfr',           type=float, default=0,  help="The initial teacher forcing ratio")
+    parser.add_argument('--tfr_sde',       type=int,   default=5,   help="The epoch that teacher forcing ratio start to decay")
     parser.add_argument('--tfr_d_step',    type=float, default=0.1,  help="Decay step that teacher forcing ratio adopted")
     parser.add_argument('--ckpt_path',     type=str,    default=None,help="The path of your checkpoints")
     parser.add_argument('--load_model_epoch', type=int, default=0, help="The epoch of the model you want to load")   
@@ -227,15 +229,18 @@ if __name__ == '__main__':
     parser.add_argument('--fast_train_epoch',   type=int, default=5,        help="Number of epoch to use fast train mode")
     
     # Kl annealing stratedy arguments
-    parser.add_argument('--kl_anneal_type',     type=str, default='Cyclical',       help="")
-    parser.add_argument('--kl_anneal_cycle',    type=int, default=20,               help="")
+    parser.add_argument('--kl_anneal_type',     type=str, default='None',       help="")
+    parser.add_argument('--kl_anneal_cycle',    type=int, default=75,               help="")
     parser.add_argument('--kl_anneal_ratio',    type=float, default=1,              help="")
     
     # LR scheduler
     parser.add_argument('--lr_scheduler',       type=str, default='MultiStepLR',    help="")
     parser.add_argument('--lr_milestones',      type=list, default=[2, 5],           help="")
-    parser.add_argument('--lr_gamma',           type=float, default=0.1,            help="")
+    parser.add_argument('--lr_gamma',           type=float, default=1,            help="")
     
+    # Random Crop
+    parser.add_argument('--random_erase',        type=float, default=0,            help="Random erase ratio")
+
 
     args = parser.parse_args()
     
