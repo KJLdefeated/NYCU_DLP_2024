@@ -4,6 +4,7 @@ import yaml
 import os
 import math
 import numpy as np
+import random
 from .VQGAN import VQGAN
 from .Transformer import BidirectionalTransformer
 
@@ -34,8 +35,8 @@ class MaskGit(nn.Module):
 ##TODO2 step1-1: input x fed to vqgan encoder to get the latent and zq
     @torch.no_grad()
     def encode_to_z(self, x):
-        raise Exception('TODO2 step1-1!')
-        return None
+        zq, z_ind, _ = self.vqgan.encode(x)
+        return zq, z_ind
     
 ##TODO2 step1-2:    
     def gamma_func(self, mode="cosine"):
@@ -51,47 +52,60 @@ class MaskGit(nn.Module):
 
         """
         if mode == "linear":
-            raise Exception('TODO2 step1-2!')
-            return None
+            def f(ratio):
+                return 1 - ratio
+            return f
         elif mode == "cosine":
-            raise Exception('TODO2 step1-2!')
-            return None
+            def f(ratio):
+                return math.cos(math.pi * ratio / 2)
+            return f
         elif mode == "square":
-            raise Exception('TODO2 step1-2!')
-            return None
+            def f(ratio):
+                return 1 - ratio ** 2
+            return f
         else:
             raise NotImplementedError
 
 ##TODO2 step1-3:            
-    def forward(self, x):
-        
-        z_indices=None #ground truth
-        logits = None  #transformer predict the probability of tokens
-        raise Exception('TODO2 step1-3!')
-        return logits, z_indices
+    def forward(self, x, ratio):
+        _, z_indices=self.encode_to_z(x) #ground truth
+        z_indices = z_indices.view(-1, self.num_image_tokens)
+        # apply mask to the ground truth
+        mask = torch.bernoulli(torch.ones_like(z_indices) * ratio)
+        z_indices_input = torch.where(mask == 1, torch.tensor(self.mask_token_id).to(mask.device), z_indices)
+        logits = self.transformer(z_indices_input)  #transformer predict the probability of tokens
+        logits = logits[..., :self.mask_token_id]
+        ground_truth = torch.zeros(z_indices.shape[0], z_indices.shape[1], self.mask_token_id).to(z_indices.device).scatter_(2, z_indices.unsqueeze(-1), 1)
+        return logits, ground_truth
     
 ##TODO3 step1-1: define one iteration decoding   
     @torch.no_grad()
-    def inpainting(self):
-        raise Exception('TODO3 step1-1!')
-        logits = self.transformer(None)
+    def inpainting(self, x , ratio, mask_b):
+        _, z_indices=self.encode_to_z(x)
+        z_indices_input = torch.where(mask_b == 1, torch.tensor(self.mask_token_id).to(mask_b.device), z_indices)
+        logits = self.transformer(z_indices_input)
         #Apply softmax to convert logits into a probability distribution across the last dimension.
-        logits = None
+        logits = torch.nn.functional.softmax(logits, dim=-1)
 
         #FIND MAX probability for each token value
-        z_indices_predict_prob, z_indices_predict = None
+        z_indices_predict_prob, z_indices_predict = torch.max(logits, dim=-1)
 
-        ratio=None 
+        ratio=self.gamma(ratio)
         #predicted probabilities add temperature annealing gumbel noise as confidence
-        g = None  # gumbel noise
+        g = -torch.log(-torch.log(torch.rand(1, device=z_indices_predict_prob.device))) # gumbel noise
         temperature = self.choice_temperature * (1 - ratio)
         confidence = z_indices_predict_prob + temperature * g
         
         #hint: If mask is False, the probability should be set to infinity, so that the tokens are not affected by the transformer's prediction
         #sort the confidence for the rank 
+        confidence = torch.where(mask_b == 0, torch.tensor(float('inf')).to(mask_b.device), confidence)
+        ratio = 0 if ratio < 1e-8 else ratio
+        n = math.ceil(mask_b.sum() * ratio)
+        _, idx_to_mask = torch.topk(confidence, n, largest=False)
         #define how much the iteration remain predicted tokens by mask scheduling
         #At the end of the decoding process, add back the original token values that were not masked to the predicted tokens
-        mask_bc=None
+        mask_bc=torch.zeros_like(mask_b).scatter_(1, idx_to_mask, 1)
+        torch.bitwise_and(mask_bc, mask_b, out=mask_bc)
         return z_indices_predict, mask_bc
     
 __MODEL_TYPE__ = {

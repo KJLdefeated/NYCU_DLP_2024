@@ -1,0 +1,119 @@
+\documentclass{article} % This command is used to set the type of document you are working on such as an article, book, or presenation
+
+\usepackage{geometry} % This package allows the editing of the page layout
+\usepackage{amsmath}  % This package allows the use of a large range of mathematical formula, commands, and symbols
+\usepackage{graphicx}  % This package allows the importing of images
+
+\newcommand{\question}[2][]{\begin{flushleft}\textbf{Question #1}: \textit{#2}\end{flushleft}}
+\newcommand{\sol}{\textbf{Solution}:} %Use if you want a boldface solution line
+\newcommand{\maketitletwo}[2][]{\begin{center}
+        \Large{\textbf{Lab 5 Report}
+        
+            Deep Learning} % Name of course here
+        \vspace{5pt}
+        
+        \normalsize{
+            Name: Kai-Jie Lin 
+            
+            Student ID\: 110652019
+            
+            \today}
+        \vspace{15pt}
+        \end{center}}
+\begin{document}
+    \maketitletwo[5]  % Optional argument is assignment number
+    %Keep a blank space between maketitletwo and \question[1]
+
+    \section{Introduction}
+    In this lab, I implemented multi-head attention module and train the transformer model to predict latent token of images.
+    After training transformer, I implemented iterative decoding for inpainting tasks.
+    I compare the FID score with different settings of mask scheduling. Finally, I got best FID score of 27.68.
+    
+    \section{Implementation Details}
+    \subsection{Multi-Head Self-Attention}
+    First create linear layer for query, key, and value. The dimensions of key, query, value are for all heads.\\
+    \includegraphics[width=5cm]{img/attn_init.png}\\
+    Then input x into linear layers to get query, key and value. 
+    We need reshape the size of query, key, value to  (batch size, token number, number of heads, embeded dimensions // number of heads).
+    We can calculate the attention score following the formula. $Attention(Q,K,V)=softmax(\frac{QK^T}{\sqrt{d_k}})V$, where $d_k$ is embeded dimensions // number of heads.
+    Here we will do a dropout before multiply the attention score with value.
+    Finally we can re-assemble all heads outputs and input into projection layer.\\
+    \includegraphics[width=10cm]{img/attn_forward.png}\\
+
+    \subsection{The details of stage2 training}
+    \textbf{Model traning forward:} \\
+    First we input the image into the VQGAN encoder to get the latent tokens.
+    Then we create a mask using bernoulli distribution with given ratio.
+    Mask the latent tokens and input it into transformer.
+    We can get the probability of each kinds of tokens.
+    Finally, we create a ground truth logits with one hot encoding from the ground truth latent tokens.
+    Return the logits and ground truth logits for further training process.\\
+    \includegraphics[width=13cm]{img/training_forward.png}\\
+    \textbf{MVTM traning:}\\
+    We use the logits and ground truth logits to calculate the cross entropy loss.\\
+    \includegraphics[width=13cm]{img/mvtm_train.png}\\
+    \textbf{Optimizer Configuration and Learning Rate Scheduler:}\\
+    Following the trick from MinGPT, we are separating out all parameters of the model into two buckets: those that will experience
+    weight decay for regularization and those that won't (biases, and layernorm/embedding weights).
+    We are then returning the PyTorch optimizer object.
+    Learning rate warm-up (in which the learning rate is gradually increased during the early stages of training) is usually used in transformer traning.
+    The learning rate is increased linearly from 0 to $R$ over first $T_R$ time steps so that: $lr[t]=R\frac{t}{T_r}$.\\
+    \includegraphics[width=13cm]{img/opt.png}\\
+    \subsection{Iterative Decoding}
+    \textbf{Mask Scheduling Functions:}\\
+    Implemented mask scheduling functions $\gamma(\frac{t}{T})$ for iterative decoding. 
+    Here are linear, cosine and square functions. When training, we just sample the ratio from uniform distribution.\\
+    \includegraphics[width=6cm]{img/gamma.png}\\
+    \textbf{Iterative Decoding:}\\
+    In one iterative decoding, we first input the image into the VQGAN encoder to get the latent tokens.
+    Then we mask the token value with given latent mask.
+    We input the masked tokens into the transformer to get the probability of each kinds of tokens.
+    We can get the most likely token and the probability of the token.
+    Calculate confidence using predicted probabilities add temperature annealing gumbel noise.
+    $Confidence = p_{z} + temperature \cdot (-\ln(-\ln(p)))$, where $p_{z}$ is the predicted probability of the token and $p$ is sampled from uniform distribution.
+    We mask the tokens with $n$ lowest confidence, other tokens are either predicted tokens or ground truth tokens. $n=\lceil \gamma(\frac{t}{T}) N \rceil$, where $N$ is number of masked tokens of input image.
+    Note that if ratio is less than $10^{-8}$, then I set it to zero to ensure last output mask is unmask.
+    Finally, we return predicted latent tokens and the mask of next iteration.\\
+    \includegraphics[width=15cm]{img/inpainting.png}\\
+    In inference, we do the iterative decoding for $T$ times and return the final predicted latent tokens.
+    Note the input image and mask should be replaced by predicted ones every time.\\
+    \includegraphics[width=12cm]{img/inference.png}\\
+    
+    \section{Experimental Results}
+    \subsection{The best testing fid}
+    The best testing fid is 27.68.\\
+    \includegraphics[width=15cm]{img/fid.png}\\
+    Predicted images:\\
+    \includegraphics[width=15cm]{img/test_0.png}\\
+    Note: FID score is calculated using second image above.\\
+    Mask in latent domain with mask scheduling:\\
+    \includegraphics[width=15cm]{img/mask_0.png}\\
+    \textbf{Traning Setting and Mask Scheduling:}\\
+    I trained transformer with batch size = 64, learning rate = 0.0005, warmup steps = 50, number of epochs = 100, dropout rate = 0.1.
+    In mask scheduling, I set total iteration to 5, sweet spot to 1 and gamma function is cosine.\\
+
+    \subsection{Comparison figures with different mask scheduling parameters setting}
+    We first compare the FID score with different gamma functions and different sweet spot. $T$ is total iteration and $t$ is sweet spot.\\
+    \includegraphics[width=10cm]{img/T_cmp.png}\\
+    We can see that the FID score increased with the increase of $t$. The performance would be poor if doing iterative decoding too many times.
+    In early iterations, the linear function gives the best performance. The square function gives the best performance in middle iterations. The cosine function gives the best performance in late iterations.\\
+    We then compare the FID score with different gamma functions and different total iteration.\\
+    \includegraphics[width=10cm]{img/T_cmp2.png}\\
+    We can conclude that the combination of smaller $T$ and linear function would give best performance.\\
+
+    \section{Discussion}
+    \textbf{Transformer Traning and Generation Performance:}\\
+    Training Loss:\\
+    \includegraphics[width=10cm]{img/loss.png}\\
+    Generation result of training for 50 epochs: FID = 34.69\\
+    \includegraphics[width=10cm]{img/50.png}\\
+    Generation result of training for 100 epochs: FID = 28.65\\
+    \includegraphics[width=10cm]{img/100.png}\\
+    Generation result of training for 150 epochs: FID = 30.89\\
+    \includegraphics[width=10cm]{img/125.png}\\
+    Generation result of training for 200 epochs: FID = 366.64\\
+    \includegraphics[width=10cm]{img/200.png}\\
+    The best performance comes from training for 100 epochs. The performance would be poor if training too many epochs. It seems like transformer would overfit to training data when training too much epochs.\\
+
+
+\end{document}
