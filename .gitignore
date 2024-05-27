@@ -6,7 +6,6 @@
 *.aux
 *.gz
 *.png
-*.pth
 *.jpg
 *.csv
 *.jpeg
