@@ -86,7 +86,7 @@ def train(args):
     log_name = f'b{args.batch_size}_lr{args.lr}_nembed{args.n_embed}_embeddim{args.embed_dim}'
     os.makedirs(f'logs/vae/{log_name}/tb', exist_ok=True)
     os.makedirs(f'logs/vae/{log_name}/ckpt', exist_ok=True)
-    writer = SummaryWriter(f'logs/wgan/{log_name}/tb')
+    writer = SummaryWriter(f'logs/vae/{log_name}/tb')
     train_loader = DataLoader(Object(mode='train'), batch_size=args.batch_size, shuffle=True, num_workers=8, drop_last=True)
     device = torch.device(f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu')
     model = VQVAE(n_embed=args.n_embed, embed_dim=args.embed_dim).to(device)

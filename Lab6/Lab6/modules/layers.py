@@ -1,5 +1,8 @@
 from torch import nn
 import torch
+import math
+import torch.nn.functional as F
+from einops import rearrange
 
 class MyConvo2d(nn.Module):
     def __init__(self, input_dim, output_dim, kernel_size, stride = 1, bias = True):
@@ -67,7 +70,7 @@ class UpSampleConv(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, input_dim, output_dim, kernel_size, resample=None, hw=64):
+    def __init__(self, input_dim, output_dim, kernel_size, emb_dim=None, resample=None, hw=64):
         super(ResidualBlock, self).__init__()
 
         self.input_dim = input_dim
@@ -78,6 +81,7 @@ class ResidualBlock(nn.Module):
         self.bn2 = None
         self.relu1 = nn.ReLU()
         self.relu2 = nn.ReLU()
+        self.emb_layer = None
         if resample == 'down':
             self.bn1 = nn.LayerNorm([input_dim, hw, hw])
             self.bn2 = nn.LayerNorm([input_dim, hw, hw])
@@ -93,14 +97,20 @@ class ResidualBlock(nn.Module):
         if resample == 'down':
             self.conv_shortcut = MeanPoolConv(input_dim, output_dim, kernel_size = 1)
             self.conv_1 = MyConvo2d(input_dim, input_dim, kernel_size = kernel_size, bias = False)
+            if emb_dim is not None:
+                self.emb_layer = nn.Linear(emb_dim, input_dim)
             self.conv_2 = ConvMeanPool(input_dim, output_dim, kernel_size = kernel_size)
         elif resample == 'up':
             self.conv_shortcut = UpSampleConv(input_dim, output_dim, kernel_size = 1)
             self.conv_1 = UpSampleConv(input_dim, output_dim, kernel_size = kernel_size, bias = False)
+            if emb_dim is not None:
+                self.emb_layer = nn.Linear(emb_dim, output_dim)
             self.conv_2 = MyConvo2d(output_dim, output_dim, kernel_size = kernel_size)
         elif resample == None:
             self.conv_shortcut = MyConvo2d(input_dim, output_dim, kernel_size = 1)
             self.conv_1 = MyConvo2d(input_dim, input_dim, kernel_size = kernel_size, bias = False)
+            if emb_dim is not None:
+                self.emb_layer = nn.Linear(emb_dim, input_dim)
             self.conv_2 = MyConvo2d(input_dim, output_dim, kernel_size = kernel_size)
         else:
             raise Exception('invalid resample value')
@@ -115,8 +125,108 @@ class ResidualBlock(nn.Module):
         output = self.bn1(output)
         output = self.relu1(output)
         output = self.conv_1(output)
+        if self.emb_layer is not None:
+            emb = self.emb_layer(emb)
+            output += emb
         output = self.bn2(output)
         output = self.relu2(output)
         output = self.conv_2(output)
 
         return shortcut + output
+    
+class CrossAttention(nn.Module):
+    def __init__(self, dim, context_dim=None, num_heads=16, attn_drop=0.1):
+        super(CrossAttention, self).__init__()
+        self.n_head = num_heads
+        self.dim = dim
+        if context_dim is None:
+            context_dim = dim
+        self.query = nn.Linear(dim, dim)
+        self.key = nn.Linear(context_dim, dim)
+        self.value = nn.Linear(context_dim, dim)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+
+    def forward(self, x, context = None):
+        if context is None:
+            context = x
+        B, T, D = x.size()
+        k = self.key(x).view(B, T, self.n_head, D // self.n_head).transpose(1, 2) # (B, nh, T, d_k)
+        q = self.query(context).view(B, T, self.n_head, D // self.n_head).transpose(1, 2) # (B, nh, T, d_q)
+        v = self.value(context).view(B, T, self.n_head, D // self.n_head).transpose(1, 2) # (B, nh, T, d_v)
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T, T)
+        att = nn.functional.softmax(att, dim=-1)
+        att = self.attn_drop(att)
+        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        ## [ B x T x D ]
+        y = y.transpose(1, 2).contiguous().view(B, T, D) # re-assemble all head outputs side by side
+        return self.proj(y)
+
+class GEGLU(nn.Module):
+    def __init__(self, dim_in, dim_out):
+        super().__init__()
+        self.proj = nn.Linear(dim_in, dim_out * 2)
+
+    def forward(self, x):
+        x, gate = self.proj(x).chunk(2, dim=-1)
+        return x * F.gelu(gate)
+
+
+class FeedForward(nn.Module):
+    def __init__(self, dim, dim_out=None, mult=4, glu=False, dropout=0.):
+        super().__init__()
+        inner_dim = int(dim * mult)
+        if dim_out is None:
+            dim_out = dim
+        project_in = nn.Sequential(
+            nn.Linear(dim, inner_dim),
+            nn.GELU()
+        ) if not glu else GEGLU(dim, inner_dim)
+
+        self.net = nn.Sequential(
+            project_in,
+            nn.Dropout(dropout),
+            nn.Linear(inner_dim, dim_out)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+class TransformerBlock(nn.Module):
+    def __init__(self, dim, n_heads, dropout=0., context_dim=None):
+        super(TransformerBlock, self).__init__()
+        self.attn1 = CrossAttention(dim=dim, num_heads=n_heads, attn_drop=dropout)
+        self.ff = FeedForward(dim, dropout=dropout, glu=True)
+        self.attn2 = CrossAttention(dim=dim, context_dim=context_dim, num_heads=n_heads, attn_drop=dropout)
+        self.norm1 = nn.LayerNorm(dim)
+        self.norm2 = nn.LayerNorm(dim)
+        self.norm3 = nn.LayerNorm(dim)
+
+    def forward(self, x, context):
+        x = self.attn1(self.norm1(x)) + x
+        x = self.attn2(self.norm2(x), context=context) + x
+        x = self.ff(self.norm3(x)) + x
+        return x
+    
+class SpatialTransformer(nn.Module):
+    def __init__(self, in_channels, n_heads, n_layers=1, dropout=0., context_dim=None):
+        super(SpatialTransformer, self).__init__()
+        self.layers = nn.ModuleList([])
+        self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+        self.conv1 = nn.Conv2d(in_channels, in_channels//n_heads, kernel_size=1)
+        for _ in range(n_layers):
+            self.layers.append(TransformerBlock(in_channels//n_heads, n_heads, dropout=dropout, context_dim=context_dim))
+        self.conv2 = nn.Conv2d(in_channels//n_heads, in_channels, kernel_size=1)
+
+    def forward(self, x, context):
+        # note: if no context is given, cross-attention defaults to self-attention
+        b, c, h, w = x.shape
+        x_in = x
+        x = self.norm(x)
+        x = self.conv1(x)
+        x = rearrange(x, 'b c h w -> b (h w) c')
+        for block in self.layers:
+            x = block(x, context=context)
+        x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w)
+        x = self.conv2(x)
+        return x + x_in
