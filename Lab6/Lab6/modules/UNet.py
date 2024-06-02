@@ -1,18 +1,6 @@
 import torch
 from torch import nn
-from abc import abstractmethod
-from modules.layers import MyConvo2d, SpatialTransformer, ResidualBlock
-
-class TimestepBlock(nn.Module):
-    """
-    Any module where forward() takes timestep embeddings as a second argument.
-    """
-
-    @abstractmethod
-    def forward(self, x, emb):
-        """
-        Apply the module to `x` given `emb` timestep embeddings.
-        """
+from modules.layers import MyConvo2d, SpatialTransformer, ResidualBlock, TimestepBlock
 
 class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     """
@@ -45,8 +33,9 @@ class UNet(nn.Module):
             channel_mult=[1,2,4,5], 
             num_classes=24,
             n_embd=8192, # for vq model
-            context_dim=None, # condition
+            context_dim=24, # condition
         ):
+        super(UNet, self).__init__()
         self.image_size = image_size
         self.in_channels = in_channels
         self.model_channels = model_channels
@@ -59,7 +48,7 @@ class UNet(nn.Module):
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
-            nn.Linear(model_channels, time_embed_dim),
+            nn.Linear(1, time_embed_dim),
             nn.SiLU(),
             nn.Linear(time_embed_dim, time_embed_dim),
         )
@@ -71,7 +60,7 @@ class UNet(nn.Module):
         ch = model_channels
         ds = 1
         input_chs = []
-        for level, mult in range(self.channel_mult):
+        for level, mult in enumerate(self.channel_mult):
             for _ in range(num_res_blocks):
                 layers = [ResidualBlock(input_dim=ch, emb_dim=time_embed_dim, output_dim=mult * model_channels, kernel_size=3)]
                 ch = mult * model_channels
@@ -97,21 +86,23 @@ class UNet(nn.Module):
         self.Decoder = nn.ModuleList([])
         for level, mult in reversed(list(enumerate(self.channel_mult))):
             for i in range(num_res_blocks + 1):
+                if len(input_chs) == 0:
+                    break
                 ich = input_chs.pop()
                 layers = [ResidualBlock(input_dim=ch + ich, emb_dim=time_embed_dim, output_dim=mult * model_channels, kernel_size=3)]
                 ch = mult * model_channels
                 if ds in attention_resolutions:
-                    layers.append(SpatialTransformer(ch, n_heads=n_heads, n_layers=transformer_n_layers, dropout=dropout))
+                    layers.append(SpatialTransformer(ch, n_heads=n_heads, n_layers=transformer_n_layers, dropout=dropout, context_dim=context_dim))
                 if level and i == num_res_blocks:
                     out_ch = ch
                     layers.append(ResidualBlock(input_dim=ch, emb_dim=time_embed_dim, output_dim=out_ch, kernel_size=3))
                     ds //= 2
                 self.Decoder.append(TimestepEmbedSequential(*layers))
-
+        out_ch = ch
         self.out = nn.Sequential(
-            nn.LayerNorm(out_ch),
+            nn.GroupNorm(32, out_ch),
             nn.SiLU(),
-            MyConvo2d(out_ch, n_embd, 1),
+            MyConvo2d(out_ch, out_channels, 1),
         )
 
     def forward(self, x, time_step, context):
@@ -122,6 +113,7 @@ class UNet(nn.Module):
         :param context: conditioning plugged in via crossattn
         """
         hs = []
+        time_step = time_step.to(torch.float32).view(-1, 1)
         emb = self.time_embed(time_step)
         for module in self.Encoder:
             x = module(x, emb, context)

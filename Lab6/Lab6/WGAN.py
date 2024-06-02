@@ -9,6 +9,7 @@ from modules.dataloader import Object
 from eval.evaluator import evaluation_model
 from tqdm import tqdm
 import argparse
+import torchvision
 
 class Generator(nn.Module):
     def __init__(self, dim=64):
@@ -99,6 +100,9 @@ def train(args):
     G = Generator(args.dim).to(device)
     D = Discriminator(args.dim).to(device)
     E = evaluation_model(device)
+    if args.load_model_epoch != -1:
+        G.load_state_dict(torch.load(f'logs/wgan/{log_name}/ckpt/G_{args.load_model_epoch}.pth', map_location=device))
+        D.load_state_dict(torch.load(f'logs/wgan/{log_name}/ckpt/D_{args.load_model_epoch}.pth', map_location=device))
     if args.optim == 'adam':
         G_opt = torch.optim.Adam(G.parameters(), lr=args.lr, betas=(0.5, 0.999))
         D_opt = torch.optim.Adam(D.parameters(), lr=args.lr, betas=(0.5, 0.999))
@@ -186,6 +190,34 @@ def train(args):
 
     writer.close()
 
+def inference(args):
+    log_name = f'b{args.batch_size}_lr{args.lr}_optim{args.optim}_dim{args.dim}_gp{args.gp}_ngen{args.gen_iter}_ndis{args.dis_iter}'
+    os.makedirs(f'logs/wgan/{log_name}/inference', exist_ok=True)
+    device = torch.device(f'cuda:{args.device}' if torch.cuda.is_available() else 'cpu')
+    G = Generator(args.dim).to(device)
+    G.load_state_dict(torch.load(f'logs/wgan/{log_name}/ckpt/G_{args.load_model_epoch}.pth', map_location=device))
+    G.eval()
+    E = evaluation_model(device)
+    tests = ['test', 'new_test']
+    scores = []
+    for i in range(2):
+        test_loader = DataLoader(Object(mode=tests[i]), batch_size=32, shuffle=False, num_workers=8)
+        for label in (pbar := tqdm(test_loader, ncols=140)):
+            label = label.to(device)
+            noise = torch.randn(32, args.dim).to(device)
+            with torch.no_grad():
+                fake_image = G(noise, label)
+            score = E.eval(fake_image, label)
+            scores.append(score)
+            pbar.set_description(f'Test {i}', refresh=False)
+            pbar.set_postfix(score=score)
+            pbar.refresh()
+
+            fake_image = fake_image.cpu().numpy()
+            fake_image = (fake_image + 1) / 2
+            torchvision.utils.save_image(torchvision.utils.make_grid(torch.tensor(fake_image)), f'logs/wgan/{log_name}/inference/{tests[i]}.png')
+    print(f'Test1: {scores[0]:.4f} | Test2: {scores[1]:.4f}')
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', type=int, default=64)
@@ -198,5 +230,10 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=500)
     parser.add_argument('--device', type=int, default=0)
     parser.add_argument('--per_save', type=int, default=10)
+    parser.add_argument('--load_model_epoch', type=int, default=420)
+    parser.add_argument('--infer', action='store_true')
     args = parser.parse_args()
-    train(args)
+    if not args.infer:
+        train(args)
+    else:
+        inference(args)

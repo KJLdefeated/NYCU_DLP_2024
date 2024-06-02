@@ -1,8 +1,20 @@
-from torch import nn
+from torch import nn, einsum
 import torch
 import math
 import torch.nn.functional as F
+from abc import abstractmethod
 from einops import rearrange
+
+class TimestepBlock(nn.Module):
+    """
+    Any module where forward() takes timestep embeddings as a second argument.
+    """
+
+    @abstractmethod
+    def forward(self, x, emb):
+        """
+        Apply the module to `x` given `emb` timestep embeddings.
+        """
 
 class MyConvo2d(nn.Module):
     def __init__(self, input_dim, output_dim, kernel_size, stride = 1, bias = True):
@@ -69,7 +81,7 @@ class UpSampleConv(nn.Module):
         return output
 
 
-class ResidualBlock(nn.Module):
+class ResidualBlock(TimestepBlock):
     def __init__(self, input_dim, output_dim, kernel_size, emb_dim=None, resample=None, hw=64):
         super(ResidualBlock, self).__init__()
 
@@ -90,7 +102,7 @@ class ResidualBlock(nn.Module):
             self.bn2 = nn.BatchNorm2d(output_dim)
         elif resample == None:
             self.bn1 = nn.BatchNorm2d(input_dim)
-            self.bn2 = nn.BatchNorm2d(output_dim)
+            self.bn2 = nn.BatchNorm2d(input_dim)
         else:
             raise Exception('invalid resample value')
 
@@ -115,7 +127,7 @@ class ResidualBlock(nn.Module):
         else:
             raise Exception('invalid resample value')
 
-    def forward(self, input):
+    def forward(self, input, emb=None):
         if self.input_dim == self.output_dim and self.resample == None:
             shortcut = input
         else:
@@ -127,7 +139,7 @@ class ResidualBlock(nn.Module):
         output = self.conv_1(output)
         if self.emb_layer is not None:
             emb = self.emb_layer(emb)
-            output += emb
+            output += emb.view(emb.size(0), emb.size(1), 1, 1)
         output = self.bn2(output)
         output = self.relu2(output)
         output = self.conv_2(output)
@@ -135,32 +147,43 @@ class ResidualBlock(nn.Module):
         return shortcut + output
     
 class CrossAttention(nn.Module):
-    def __init__(self, dim, context_dim=None, num_heads=16, attn_drop=0.1):
+    def __init__(self, dim, context_dim=None, num_heads=16, dim_head=64, attn_drop=0.1):
         super(CrossAttention, self).__init__()
         self.n_head = num_heads
         self.dim = dim
+        self.inner_dim = dim_head * num_heads
+        self.scale = dim_head ** -0.5
         if context_dim is None:
             context_dim = dim
-        self.query = nn.Linear(dim, dim)
-        self.key = nn.Linear(context_dim, dim)
-        self.value = nn.Linear(context_dim, dim)
+        self.query = nn.Linear(dim, self.inner_dim, bias=False)
+        self.key = nn.Linear(context_dim, self.inner_dim, bias=False)
+        self.value = nn.Linear(context_dim, self.inner_dim, bias=False)
         self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
+        self.proj = nn.Linear(self.inner_dim, dim)
 
     def forward(self, x, context = None):
+        h = self.n_head
+
+        q = self.query(x)
         if context is None:
             context = x
-        B, T, D = x.size()
-        k = self.key(x).view(B, T, self.n_head, D // self.n_head).transpose(1, 2) # (B, nh, T, d_k)
-        q = self.query(context).view(B, T, self.n_head, D // self.n_head).transpose(1, 2) # (B, nh, T, d_q)
-        v = self.value(context).view(B, T, self.n_head, D // self.n_head).transpose(1, 2) # (B, nh, T, d_v)
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1))) # (B, nh, T, T)
-        att = nn.functional.softmax(att, dim=-1)
-        att = self.attn_drop(att)
-        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        ## [ B x T x D ]
-        y = y.transpose(1, 2).contiguous().view(B, T, D) # re-assemble all head outputs side by side
-        return self.proj(y)
+        else:
+            context = context.view(context.size(0), 1, -1)
+        k = self.key(context)
+        v = self.value(context)
+
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
+
+        sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
+
+        # attention, what we cannot get enough of
+        attn = sim.softmax(dim=-1)
+
+        out = einsum('b i j, b j d -> b i d', attn, v)
+        out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+        out = self.proj(out)
+        out = self.attn_drop(out)
+        return out
 
 class GEGLU(nn.Module):
     def __init__(self, dim_in, dim_out):
@@ -213,10 +236,10 @@ class SpatialTransformer(nn.Module):
         super(SpatialTransformer, self).__init__()
         self.layers = nn.ModuleList([])
         self.norm = nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
-        self.conv1 = nn.Conv2d(in_channels, in_channels//n_heads, kernel_size=1)
+        self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=1)
         for _ in range(n_layers):
-            self.layers.append(TransformerBlock(in_channels//n_heads, n_heads, dropout=dropout, context_dim=context_dim))
-        self.conv2 = nn.Conv2d(in_channels//n_heads, in_channels, kernel_size=1)
+            self.layers.append(TransformerBlock(in_channels, n_heads, dropout=dropout, context_dim=context_dim))
+        self.conv2 = nn.Conv2d(in_channels, in_channels, kernel_size=1)
 
     def forward(self, x, context):
         # note: if no context is given, cross-attention defaults to self-attention

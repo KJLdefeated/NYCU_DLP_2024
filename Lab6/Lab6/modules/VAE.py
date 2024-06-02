@@ -3,21 +3,20 @@ from torch import nn
 import os
 import torch.nn.functional as F
 from taming.modules.vqvae.quantize import VectorQuantizer
-from layers import MyConvo2d, ResidualBlock
+from modules.layers import MyConvo2d, ResidualBlock
 from torch.utils.data import DataLoader
-from dataloader import Object
+from modules.dataloader import Object
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import torchvision
 
 class Encoder(nn.Module):
-    def __init__(self, in_channels = 3, ch = 128, ch_mult=[1, 2, 4], z_dim = 3):
+    def __init__(self, in_channels = 3, ch = 128, ch_mult=[1, 2, 4], z_dim = 3, hw = 64):
         super(Encoder, self).__init__()
         self.in_channels = in_channels
         self.conv1 = MyConvo2d(in_channels, ch, 3)
         self.blocks = []
         block_in = ch
-        hw = 64
         for i in range(len(ch_mult)):
             block_out = ch*ch_mult[i]
             self.blocks.append(ResidualBlock(block_in, block_out, 3, resample = 'down', hw=hw))
@@ -59,7 +58,9 @@ class VQVAE(nn.Module):
         super(VQVAE, self).__init__()
         self.n_embed = n_embed
         self.embed_dim = embed_dim
-        self.encoder = Encoder(in_channels=in_channels, z_dim=embed_dim)
+        ch_mult = [1, 2, 4]
+        self.latent_hw = 64 // 2**len(ch_mult)
+        self.encoder = Encoder(in_channels=in_channels, z_dim=embed_dim, ch = 128, ch_mult=ch_mult, hw = 64)
         self.decoder = Decoder(z_dim=embed_dim, out_channels=in_channels)
         self.quantize = VectorQuantizer(n_embed, embed_dim, 0.25)
 
