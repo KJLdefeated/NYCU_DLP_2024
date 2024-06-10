@@ -33,7 +33,7 @@ class UNet(nn.Module):
             channel_mult=[1,2,4,5], 
             num_classes=24,
             n_embd=8192, # for vq model
-            context_dim=24, # condition
+            context_dim=128, # condition
         ):
         super(UNet, self).__init__()
         self.image_size = image_size
@@ -53,7 +53,7 @@ class UNet(nn.Module):
             nn.Linear(time_embed_dim, time_embed_dim),
         )
 
-        self.label_emb = nn.Embedding(num_classes, time_embed_dim)
+        self.label_emb = nn.Linear(num_classes, context_dim)
 
         # Input Blocks
         self.Encoder = nn.ModuleList([TimestepEmbedSequential(MyConvo2d(in_channels, model_channels, 3))])
@@ -115,6 +115,7 @@ class UNet(nn.Module):
         hs = []
         time_step = time_step.to(torch.float32).view(-1, 1)
         emb = self.time_embed(time_step)
+        context = self.label_emb(context)
         for module in self.Encoder:
             x = module(x, emb, context)
             hs.append(x)

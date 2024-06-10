@@ -111,18 +111,24 @@ class ResidualBlock(TimestepBlock):
             self.conv_1 = MyConvo2d(input_dim, input_dim, kernel_size = kernel_size, bias = False)
             if emb_dim is not None:
                 self.emb_layer = nn.Linear(emb_dim, input_dim)
+                self.bn1 = nn.GroupNorm(32, input_dim)
+                self.bn2 = nn.GroupNorm(32, input_dim)
             self.conv_2 = ConvMeanPool(input_dim, output_dim, kernel_size = kernel_size)
         elif resample == 'up':
             self.conv_shortcut = UpSampleConv(input_dim, output_dim, kernel_size = 1)
             self.conv_1 = UpSampleConv(input_dim, output_dim, kernel_size = kernel_size, bias = False)
             if emb_dim is not None:
                 self.emb_layer = nn.Linear(emb_dim, output_dim)
+                self.bn1 = nn.GroupNorm(32, input_dim)
+                self.bn2 = nn.GroupNorm(32, output_dim)
             self.conv_2 = MyConvo2d(output_dim, output_dim, kernel_size = kernel_size)
         elif resample == None:
             self.conv_shortcut = MyConvo2d(input_dim, output_dim, kernel_size = 1)
             self.conv_1 = MyConvo2d(input_dim, input_dim, kernel_size = kernel_size, bias = False)
             if emb_dim is not None:
                 self.emb_layer = nn.Linear(emb_dim, input_dim)
+                self.bn1 = nn.GroupNorm(32, input_dim)
+                self.bn2 = nn.GroupNorm(32, input_dim)
             self.conv_2 = MyConvo2d(input_dim, output_dim, kernel_size = kernel_size)
         else:
             raise Exception('invalid resample value')
