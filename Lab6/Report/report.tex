@@ -1,0 +1,142 @@
+\documentclass{article} % This command is used to set the type of document you are working on such as an article, book, or presenation
+
+\usepackage{geometry} % This package allows the editing of the page layout
+\usepackage{amsmath}  % This package allows the use of a large range of mathematical formula, commands, and symbols
+\usepackage{graphicx}  % This package allows the importing of images
+\usepackage{amssymb}
+
+\newcommand{\question}[2][]{\begin{flushleft}\textbf{Question #1}: \textit{#2}\end{flushleft}}
+\newcommand{\sol}{\textbf{Solution}:} %Use if you want a boldface solution line
+\newcommand{\maketitletwo}[2][]{\begin{center}
+        \Large{\textbf{Lab 6 Report}
+        
+            Deep Learning} % Name of course here
+        \vspace{5pt}
+        
+        \normalsize{
+            Name: Kai-Jie Lin 
+            
+            Student ID\: 110652019
+            
+            \today}
+        \vspace{15pt}
+        \end{center}}
+\begin{document}
+    \maketitletwo[5]  % Optional argument is assignment number
+    %Keep a blank space between maketitletwo and \question[1]
+
+    \section{Introduction}
+    In this lab, I implemented Wasserstein GAN with Gradient Penalty (WGAN-GP) and Latent Diffusion Model (LDM) to generate images. 
+    The WGAN-GP is a variant of GAN that uses Wasserstein distance as the loss function and gradient penalty to enforce the Lipschitz constraint. 
+    The LDM is a type of generative model that combines the principles of diffusion models with latent variable models.
+    I trained these two model on given datasets and got 0.8 score from evaluation model.
+    
+    \section{Implementation Details}
+    \subsection{WGAN-GP}
+    \textbf{WGAN-GP objective:} \\
+    The objective of WGAN-GP is to minimize the Wasserstein distance between the real data distribution $p_r$ and the generated data distribution $p_g$. 
+    To ensure that the critic function satisfies the Lipschitz constraint (a requirement for the Wasserstein distance), WGAN-GP introduces a gradient penalty. This replaces the weight clipping method used in the original WGAN.
+    The objective function of WGAN-GP is given by: 
+    \begin{equation}
+        \min_{G} \max_{D} \mathbb{E}_{x \sim p_r} [D(x)] - {E}_{z \sim p_z} [D(G(z))] + \lambda {E}_{\hat{x} \sim p_{\hat{x}}} [(||\nabla_{\hat{x}} D(\hat{x})||_2 - 1)^2]
+    \end{equation}
+    where $G$ is the generator, $D$ is the critic, $p_r$ is the real data distribution, $p_z$ is the noise distribution, $\hat{x}$ is a sample from the distribution between real and generated data, and $\lambda$ is the gradient penalty coefficient. \\
+    \textbf{Generator Details:} \\
+    The generator is composed of four residual blocks. Each residual block consists of two convolutional layer, batch normalization, and ReLU activation. 
+    We input a 64 dim noise and concated with one-hot encoding label condition. The output of the generator is a 3x64x64 tensor representing an RGB image. \\
+    \textbf{Discriminator Details:} \\
+    I implemented a projection discriminator to handle the relation between images and condition labels. The discriminator is also composed of four residual blocks. While the residual block of generator do upsampling, the residual block of discriminator do downsampling.
+    We first use residual blocks to downsample the input image into low dimensional hidden features. Then, we encode the label with linear layer and multipy it with hidden features.
+    Finally, we sum the value in the vector and output the critic value of given image and label.  \\
+    The architecture of the generator and discriminator is shown in the figure below. \\
+    \includegraphics[width=7.5cm]{img/Gen.png}
+    \includegraphics[width=7.5cm]{img/Dis.png}
+    
+    \subsection{Latent Diffusion Model}
+    The architecture of the LDM is shown in the figure below. \\
+    \includegraphics[width=10cm]{img/ldm.png} \\
+    It mainly consists of two parts: variational autoencoder and UNet.
+    In the forward pass of diffusion process, we first encode the image into latent representation with variational autoencoder. 
+    Then, we gradually add noise to the latent representation. In the denoising process, we use UNet and VAE decoder to recover the original image from the noisy latent representation.
+    The objective function of LDM is given by:
+    \begin{equation}
+        \mathbb{E}_{{\cal E}(x), \epsilon \sim \mathcal{N}(0, 1), t} [\Vert{\epsilon - \epsilon_{\theta}(z_t, c, t)}\Vert_{2}^{2}]
+    \end{equation}
+    where ${\cal E}(x)$ is the encoder, $\epsilon$ is the noise, $\epsilon_{\theta}(z_t, c, t)$ is the unet model, $z_t$ is the latent representation, $c$ is the condition label, and $t$ is the time step. \\
+    \textbf{VAE Details:} \\
+    To get a good generation result, I implemented vector quantized variational autoencoder (VQ-VAE). 
+    The encoder is composed of three downsampling residual blocks. The decoder is composed of three upsampling residual blocks. Each residual block consists of two convolutional layer, batch normalization, and ReLU activation.
+    The output of the encoder is a 6x8x8 tensor representing the latent representation. I used a codebook of size 8192 to quantize the latent representation. 
+    The loss function is consists of reconstruction loss, codebook loss, and VQGAN loss. This ensures that the reconstructions are confined to the image manifold by enforcing local realism and avoids bluriness introduced by relying
+    solely on pixel-space losses such as L2 or L1 objectives.\\
+    The loss function is given by:
+    \begin{equation}
+        \mathcal{L}_{\text{recon}} = \Vert x - \text{Decoder}(\text{Encoder}(x)) \Vert_2^2
+    \end{equation}
+    \begin{equation}
+        \mathcal{L}_{\text{G}} = -\text{Discriminator}(\text{Decoder}(\text{Encoder}(x)))
+    \end{equation}
+    \begin{equation}
+        \mathcal{L}_{\text{codebook}} = \Vert z_e - \text{Embedding}(\text{Quantize}(z_e)) \Vert_2^2
+    \end{equation}
+    \begin{equation}
+        \mathcal{L}_{\text{D}} = \text{Discriminator}(\text{Decoder}(\text{Encoder}(x))) - \text{Discriminator}(x) 
+    \end{equation}
+    \begin{equation}
+        \mathcal{L} = \mathcal{L}_{\text{recon}} + \mathcal{L}_{\text{G}} + \mathcal{L}_{\text{D}} + \mathcal{L}_{\text{codebook}}
+    \end{equation}
+    \textbf{UNet Details:} \\
+    I implemented a time-conditioned UNet as denoising model, augmented with the cross-attention mechanism to handle flexible conditioning information for image generation.
+    The Unet is composed of encoder, decoder and middle block. The encoder is composed of six residual blocks and two spatial transformers. The decoder is also composed of six residual blocks and two spatial transformers. The middle block is composed of two residual blocks and one spatial transformer.
+    The spatial transformer is used to align the latent representation with the condition label. The cross-attention mechanism is used to handle the relation between latent representation and condition label. \\
+    \textbf{DDIM Sampler Details:} \\
+    In sampling process, I used Denoising Diffusion Implicit Model (DDIM) to generate images.
+    DDIM has the same marginal noise distribution but deterministically maps noise back to the original data samples.
+    During generation, we don’t have to follow the whole chain $t = 1,...,T$, but rather a subset of steps. Let's denote $s < T$ as two steps in this accelerated trajectory. 
+    The DDIM update step is:
+    \begin{equation}
+        q_{\sigma, s<t}(z_s|z_t, z_0) = \mathcal{N}(z_s; \sqrt{\bar{\alpha_{s}}}(\frac{z_t - \sqrt{1-\bar{\alpha_{t}}}\epsilon_{\theta}(z_t)}{\sqrt{\bar{\alpha_{t}}}} + \sqrt{1-\bar{\alpha_t}-\sigma_t^2}\epsilon_{\theta}(z_t), \sigma_s^2\text{I})
+    \end{equation}
+    We can get final sample $x_0$ with VAE decoder: $x_0 = \text{Decoder}(z_0)$.
+    DDIM can produce the good quality samples when s is small. With DDIM, it is possible to train the diffusion model up to any arbitrary number of forward steps but only sample from a subset of steps in the generative process.
+    \section{Results and Discussions}
+    \subsection{Synthetic Image Grids and Denoising Process}
+    \textbf{Hyperparameters settings:} \\
+    WGAN-GP: Learning rate = 0.0003, Batch size = 64, Adam optimizer, critic iteration = 5, gp $\lambda$ = 10, train epoch = 500.  \\
+    VAE for LDM: Learning rate = 0.0001, Batch size = 64, Adam optimizer, codebook size = 8192, embedding dim = 6, train epoch = 300.\\
+    LDM: Learning rate = 0.000003, Batch size = 32, Adam optimizer, transformer layers = 1, attention heads = 8, train epoch = 1000. \\
+    DDIM: $\beta$ scheduler = cosine, number of ddim steps = 50. \\
+    \textbf{Test1} \\
+    WGAN-GP results: 0.527 \\
+    \includegraphics[width=10cm]{img/wgan1.png} \\
+    LDM results: 0.819 \\
+    \includegraphics[width=10cm]{img/ldm1.png} \\
+    \textbf{Test2} \\
+    WGAN-GP results: 0.678 \\
+    \includegraphics[width=10cm]{img/wgan2.png} \\
+    LDM results: 0.821 \\
+    \includegraphics[width=10cm]{img/ldm2.png} \\
+    \textbf{Denoising Process images:} \\
+    \includegraphics[width=10cm]{img/denos.png} \\
+    We can observe that the biginning images are not like noise. This is because we sample the noisy data in latent space and use VAE decoder to generate the image.\\
+    \subsection{Compare GAN and Diffusion Models}
+    \textbf{GAN:} \\
+    Training: Faster but unstable and sensitive to hyperparameters. \\
+    Inferencing: Fast with potentially inconsistent quality. \\
+    Computing Resources: Generally efficient but resource-intensive during unstable training phases. \\
+    Generation Quality: High quality but prone to mode collapse and artifacts. \\
+    \textbf{DDPM:} \\
+    Training: Stable but slow and complex.\\
+    Inferencing: Slow with consistent high quality.\\
+    Computing Resources: Resource-intensive due to iterative nature.\\
+    Generation Quality: High fidelity and diversity with fewer artifacts. \\
+    \subsection{Extra experiments}
+    \textbf{Classifier Guidance:} \\
+    I tried to include classifier guidance into my DDIM, but the results are worse than original. I think the reason is that the classifier need to classify the image with noise, which is hard to get a good result. \\
+    Test1: 0.75 \\
+    \includegraphics[width=10cm]{img/cg1.png} \\
+    Test2: 0.78 \\
+    \includegraphics[width=10cm]{img/cg2.png} \\
+    
+
+\end{document}
